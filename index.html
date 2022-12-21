@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils_3d/control_utils_3d.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+
+
+  
+    <div class="container">
+        <video class="input_video"></video>
+        <canvas class="output_canvas" width="1280px" height="720px"></canvas>
+      </div>
+
+      
+  <script type="module">
+    const videoElement = document.getElementsByClassName('input_video')[0];
+    const canvasElement = document.getElementsByClassName('output_canvas')[0];
+    const canvasCtx = canvasElement.getContext('2d');
+
+    let leftArmData;
+    let leftShoulderRaw;
+    let leftElbowRaw;
+    let leftWristRaw;
+
+
+    // calculate angle between three points 
+    // angle in radians : a,b,c are objects with x,y values
+    function getAngleInRadians(A,B,C) {
+      let BA = {
+        x: A.x - B.x,
+        y: A.y - B.y
+      }
+
+      let BC = {
+        x: C.x - B.x,
+        y: C.y - B.y
+      }
+
+      let UV = (BA.x * BC.x) + (BA.y * BC.y);
+      let UVmod = Math.sqrt( Math.pow(BA.x, 2) + Math.pow(BA.y, 2)) +  Math.sqrt( Math.pow(BC.x, 2) + Math.pow(BC.y, 2))
+      return Math.acos(UV/UVmod);
+    }
+
+function find_angle(A,B,C) {
+    var AB = Math.sqrt(Math.pow(B.x-A.x,2)+ Math.pow(B.y-A.y,2));    
+    var BC = Math.sqrt(Math.pow(B.x-C.x,2)+ Math.pow(B.y-C.y,2)); 
+    var AC = Math.sqrt(Math.pow(C.x-A.x,2)+ Math.pow(C.y-A.y,2));
+    return Math.acos((BC*BC+AB*AB-AC*AC)/(2*BC*AB));
+}
+function radians_to_degrees(radians)
+{
+  var pi = Math.PI;
+  return radians * (180/pi);
+}
+    // const landmarkContainer = document.getElementsByClassName('landmark-grid-container')[0];
+    // const grid = new LandmarkGrid(landmarkContainer);
+    
+    function onResults(results) {
+      if (!results.poseLandmarks) {
+        // grid.updateLandmarks([]);
+        return;
+      }
+    
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.segmentationMask, 0, 0,
+                          canvasElement.width, canvasElement.height);
+    
+      // Only overwrite existing pixels.
+      canvasCtx.globalCompositeOperation = 'source-in';
+       canvasCtx.fillStyle = "rgba(0, 0, 0, 0.1)"; // very low opacity
+   
+      canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+    
+      // Only overwrite missing pixels.
+      canvasCtx.globalCompositeOperation = 'destination-atop';
+      canvasCtx.drawImage(
+          results.image, 0, 0, canvasElement.width, canvasElement.height);
+    
+      canvasCtx.globalCompositeOperation = 'source-over';
+
+      // all landmaks
+     // console.log(results.poseLandmarks)
+     leftShoulderRaw = results.poseLandmarks[11];
+     leftElbowRaw = results.poseLandmarks[13];
+     leftWristRaw = results.poseLandmarks[15];
+     
+     leftArmData = [
+      {
+        x:leftShoulderRaw.x,
+        y:leftShoulderRaw.y
+      },
+      {
+        x:leftElbowRaw.x,
+        y:leftElbowRaw.y
+      },
+      {
+        x:leftWristRaw.x,
+        y:leftWristRaw.y
+      }
+     ]
+
+     // console.log(leftArmData)
+     let angle = find_angle(leftArmData[0],leftArmData[1],leftArmData[2]);
+     console.log(radians_to_degrees(angle));
+
+
+
+      drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
+                     {color: '#FF4219', lineWidth: 4});
+      drawLandmarks(canvasCtx, results.poseLandmarks,
+                    {color: '#06FF76', lineWidth: 2});
+      canvasCtx.restore();
+    
+      // grid.updateLandmarks(results.poseWorldLandmarks);
+    }
+    
+    const pose = new Pose({locateFile: (file) => {
+      return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+    }});
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      enableSegmentation: true,
+      smoothSegmentation: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    pose.onResults(onResults);
+    
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await pose.send({image: videoElement});
+      },
+      width: 1280,
+      height: 720
+    });
+    camera.start();
+    </script>
+</body>
+</html>
